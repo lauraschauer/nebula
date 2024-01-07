@@ -51,29 +51,40 @@ class Nebula:
         self.seq_len = seq_len
 
         # input checks
-        assert tokenizer in ['bpe', 'whitespace'], "tokenizer must be in ['bpe', 'whitespace']"
-        assert vocab_file is None or os.path.exists(vocab_file), f"[-] {vocab_file} doesn't exist..."
-        assert bpe_model_file is None or os.path.exists(bpe_model_file), f"[-] {bpe_model_file} doesn't exist..."
-        assert torch_model_file is None or os.path.exists(torch_model_file), f"[-] {torch_model_file} doesn't exist..."
-        assert speakeasy_config is None or os.path.exists(speakeasy_config), f"[-] {speakeasy_config} doesn't exist..."
+        assert tokenizer in [
+            'bpe', 'whitespace'], "tokenizer must be in ['bpe', 'whitespace']"
+        assert vocab_file is None or os.path.exists(
+            vocab_file), f"[-] {vocab_file} doesn't exist..."
+        assert bpe_model_file is None or os.path.exists(
+            bpe_model_file), f"[-] {bpe_model_file} doesn't exist..."
+        assert torch_model_file is None or os.path.exists(
+            torch_model_file), f"[-] {torch_model_file} doesn't exist..."
+        assert speakeasy_config is None or os.path.exists(
+            speakeasy_config), f"[-] {speakeasy_config} doesn't exist..."
 
         # dynamic extractor setup
-        self.dynamic_extractor = PEDynamicFeatureExtractor(speakeasyConfig=speakeasy_config) 
+        self.dynamic_extractor = PEDynamicFeatureExtractor(
+            speakeasyConfig=speakeasy_config)
 
         # config
         if self.vocab_size == 50000:
             if tokenizer == "bpe":
                 if bpe_model_file is None:
-                    bpe_model_file = os.path.join(os.path.dirname(nebula.__file__), "objects", "bpe_50000_sentencepiece.model")
+                    bpe_model_file = os.path.join(os.path.dirname(
+                        nebula.__file__), "objects", "bpe_50000_sentencepiece.model")
                 if vocab_file is None:
-                    vocab_file = os.path.join(os.path.dirname(nebula.__file__), "objects", "bpe_50000_vocab.json")
+                    vocab_file = os.path.join(os.path.dirname(
+                        nebula.__file__), "objects", "bpe_50000_vocab.json")
                 if torch_model_file is None:
-                    torch_model_file = os.path.join(os.path.dirname(nebula.__file__), "objects", "bpe_50000_torch.model")
+                    torch_model_file = os.path.join(os.path.dirname(
+                        nebula.__file__), "objects", "bpe_50000_torch.model")
             if tokenizer == "whitespace":
                 if vocab_file is None:
-                    vocab_file = os.path.join(os.path.dirname(nebula.__file__), "objects", "whitespace_50000_vocab.json")
+                    vocab_file = os.path.join(os.path.dirname(
+                        nebula.__file__), "objects", "whitespace_50000_vocab.json")
                 if torch_model_file is None:
-                    torch_model_file = os.path.join(os.path.dirname(nebula.__file__), "objects", "whitespace_50000_torch.model")
+                    torch_model_file = os.path.join(os.path.dirname(
+                        nebula.__file__), "objects", "whitespace_50000_torch.model")
         else:
             msg = f"[-] Nebula supports pre-trained models only for vocab_size = 50000, you have: {self.vocab_size}"
             msg += " | No pre-trained objects loaded! Be sure to train tokenizer and PyTorch model!"
@@ -85,7 +96,7 @@ class Nebula:
                 # actual vocab size might differ slightly because of special tokens
                 nebula_vocab = json.load(f)
             self.vocab_size = len(nebula_vocab)
-        
+
         # tokenizer initialization
         if tokenizer == 'bpe':
             self.tokenizer = JSONTokenizerBPE(
@@ -93,7 +104,7 @@ class Nebula:
                 seq_len=self.seq_len,
                 vocab=vocab_file,
                 model_path=bpe_model_file
-            )            
+            )
         if tokenizer == 'whitespace':
             self.tokenizer = JSONTokenizerNaive(
                 vocab_size=self.vocab_size,
@@ -101,19 +112,19 @@ class Nebula:
                 vocab=vocab_file
             )
         logging.info(" [!] Tokenizer ready!")
-        
+
         # PyTorch model initialization
         if torch_model_config is None:
             torch_model_config = {
                 "vocab_size": self.vocab_size,
                 "maxlen": self.seq_len,
-                "chunk_size": 64, # self-attention window size
+                "chunk_size": 64,  # self-attention window size
                 "dModel": 64,  # embedding & transformer dimension
                 "nHeads": 8,  # number of heads in nn.MultiheadAttention
                 "dHidden": 256,  # dimension of the feedforward network model in nn.TransformerEncoder
                 "nLayers": 2,  # number of nn.TransformerEncoderLayer in nn.TransformerEncoder
-                "numClasses": 1, # binary classification
-                "hiddenNeurons": [64], # classifier head depth
+                "numClasses": 1,  # binary classification
+                "hiddenNeurons": [64],  # classifier head depth
                 "layerNorm": False,
                 "dropout": 0.3,
                 "mean_over_sequence": False,
@@ -121,7 +132,8 @@ class Nebula:
             }
         self.model = TransformerEncoderChunks(**torch_model_config)
 
-        state_dict = torch.load(torch_model_file) if torch_model_file is not None else {}
+        state_dict = torch.load(torch_model_file, map_location=torch.device(
+            'cpu')) if torch_model_file is not None else {}
         self.model.load_state_dict(state_dict)
         logging.info(f" [!] Model ready!")
 
@@ -132,7 +144,8 @@ class Nebula:
         elif isinstance(pe_file, bytes):
             bytez = pe_file
         else:
-            raise ValueError("preprocess(): data must be a path to a PE file or a bytes object")
+            raise ValueError(
+                "preprocess(): data must be a path to a PE file or a bytes object")
 
         dynamic_features_json = self.dynamic_extractor.emulate(data=bytez)
         return dynamic_features_json
@@ -140,7 +153,7 @@ class Nebula:
     def preprocess(self, emulation_report: dict) -> np.ndarray:
         dynamic_features = self.tokenizer.encode(emulation_report)
         return dynamic_features
-    
+
     def predict_proba(self, dynamic_features: np.ndarray) -> float:
         dynamic_features = torch.Tensor(dynamic_features).long()
         with torch.no_grad():
@@ -149,27 +162,30 @@ class Nebula:
 
 
 class ModelTrainer(object):
-    def __init__(self, 
-                    model,
-                    device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'), 
-                    loss_function=BCEWithLogitsLoss(),
-                    optimizer_class=AdamW,
-                    optimizer_config={"lr": 2.5e-4, "weight_decay": 1e-2},
-                    optim_scheduler=None,
-                    batchSize=64,
-                    verbosity_n_batches=100,
-                    outputFolder=None,
-                    falsePositiveRates=[0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1],
-                    modelForwardPass=None,
-                    stateDict = None,
-                    timestamp = None,
-                    clip_grad_norm = 0.5,
-                    optim_step_budget = 1000,
-                    time_budget = None,
-                    n_batches_grad_update = 1,
-                    n_output_classes = None):
-        self.model = model 
-        self.optimizer = optimizer_class(self.model.parameters(), **optimizer_config)
+    def __init__(self,
+                 model,
+                 device=torch.device(
+                     'cuda' if torch.cuda.is_available() else 'cpu'),
+                 loss_function=BCEWithLogitsLoss(),
+                 optimizer_class=AdamW,
+                 optimizer_config={"lr": 2.5e-4, "weight_decay": 1e-2},
+                 optim_scheduler=None,
+                 batchSize=64,
+                 verbosity_n_batches=100,
+                 outputFolder=None,
+                 falsePositiveRates=[0.0001, 0.0003,
+                                     0.001, 0.003, 0.01, 0.03, 0.1],
+                 modelForwardPass=None,
+                 stateDict=None,
+                 timestamp=None,
+                 clip_grad_norm=0.5,
+                 optim_step_budget=1000,
+                 time_budget=None,
+                 n_batches_grad_update=1,
+                 n_output_classes=None):
+        self.model = model
+        self.optimizer = optimizer_class(
+            self.model.parameters(), **optimizer_config)
         self.loss_function = loss_function
         self.verbosity_n_batches = verbosity_n_batches
         self.batch_size = batchSize
@@ -180,7 +196,8 @@ class ModelTrainer(object):
         if n_output_classes is not None:
             self.n_output_classes = n_output_classes
         else:
-            self.n_output_classes = [x for x in self.model.children() if isinstance(x, Linear)][-1].out_features
+            self.n_output_classes = [x for x in self.model.children(
+            ) if isinstance(x, Linear)][-1].out_features
 
         # lr scheduling setup, for visulaizations see:
         # https://towardsdatascience.com/a-visual-guide-to-learning-rate-schedulers-in-pytorch-24bbb262c863
@@ -189,14 +206,14 @@ class ModelTrainer(object):
         elif optim_scheduler == "gpt":
             # TODO: broken
             self.optim_scheduler = OptimSchedulerGPT(
-                self.optimizer, 
+                self.optimizer,
                 max_lr=optimizer_config['lr'],
                 half_cycle_batches=optim_step_budget//2
             )
         elif optim_scheduler == "step":
             nr_of_steps = 3
             self.optim_scheduler = OptimSchedulerStep(
-                self.optimizer, 
+                self.optimizer,
                 step_size=optim_step_budget//nr_of_steps
             )
         elif optim_scheduler == "triangular":
@@ -220,44 +237,49 @@ class ModelTrainer(object):
             )
         else:
             self.optim_scheduler = optim_scheduler(self.optimizer)
-        
+
         self.learning_rates = []
         self.time_budget = time_budget
 
         self.fp_rates = falsePositiveRates
-        self.fp_reporting_idx = 1 # what FPR stats to report every epoch
+        self.fp_reporting_idx = 1  # what FPR stats to report every epoch
 
         self.device = device
         self.model.to(self.device)
 
         self.output_folder = outputFolder
         if self.output_folder is not None:
-            self.trainingFileFolder = os.path.join(self.output_folder, "training_files")
+            self.trainingFileFolder = os.path.join(
+                self.output_folder, "training_files")
             os.makedirs(self.output_folder, exist_ok=True)
             os.makedirs(self.trainingFileFolder, exist_ok=True)
-            
+
         if stateDict:
             self.model.load_state_dict(torch.load(stateDict))
         if modelForwardPass:
             self.model.forwardPass = modelForwardPass
         else:
             self.model.forwardPass = self.model.forward
-        
-        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+
+        trainable_params = sum(p.numel()
+                               for p in self.model.parameters() if p.requires_grad)
         # if .name in self.model attributes
         if not hasattr(self.model, "__name__"):
             self.model.__name__ = "model"
-        logging.warning(f" [!] Iniatialized {self.model.__name__}. Total trainable parameters: {trainable_params/1e6:.4f}e6")
+        logging.warning(
+            f" [!] Iniatialized {self.model.__name__}. Total trainable parameters: {trainable_params/1e6:.4f}e6")
 
     def loadState(self, stateDict):
         self.model.load_state_dict(torch.load(stateDict))
 
     def dumpResults(self, prefix="", model_only=False):
         if self.reporting_timestamp:
-            prefix = os.path.join(self.trainingFileFolder, f"{prefix}{self.reporting_timestamp}")
+            prefix = os.path.join(self.trainingFileFolder,
+                                  f"{prefix}{self.reporting_timestamp}")
         else:
-            prefix = os.path.join(self.trainingFileFolder, f"{prefix}{int(time.time())}")
-        
+            prefix = os.path.join(self.trainingFileFolder,
+                                  f"{prefix}{int(time.time())}")
+
         modelFile = f"{prefix}-model.torch"
         torch.save(self.model.state_dict(), modelFile)
         dumpString = f""" [!] {time.ctime()}: Dumped results:
@@ -280,12 +302,14 @@ class ModelTrainer(object):
                 dumpString += f"\n\t\ttrain TPRs  : {os.path.basename(prefix)}-trainTPRs.npy"
 
             if self.learning_rates:
-                np.save(f"{prefix}-learning_rates.npy", np.array(self.learning_rates))
+                np.save(f"{prefix}-learning_rates.npy",
+                        np.array(self.learning_rates))
                 dumpString += f"\n\t\tlearning rates: {os.path.basename(prefix)}-learning_rates.npy"
         logging.warning(dumpString)
-    
+
     def getMetrics(self, true_labels, predicted_probs):
-        assert isinstance(true_labels, np.ndarray) and isinstance(predicted_probs, np.ndarray)
+        assert isinstance(true_labels, np.ndarray) and isinstance(
+            predicted_probs, np.ndarray)
         assert len(true_labels) == len(predicted_probs)
         metrics = []
         fprs, tprs, thresholds = roc_curve(true_labels, predicted_probs)
@@ -308,21 +332,22 @@ class ModelTrainer(object):
         return metricsReportList
 
     def logBatchMetrics(self, loss, targets, probs,):
-        metricsReportList = [f"Loss: {loss.item():.6f}", f"Elapsed: {time.time() - self.tick:.2f}s"]
+        metricsReportList = [
+            f"Loss: {loss.item():.6f}", f"Elapsed: {time.time() - self.tick:.2f}s"]
 
         # report TPR | F1 | AUC only for binary classification
         if self.n_output_classes == 1:
 
             # metrics for set of batches since last reporting
             batchMetrics = self.getMetrics(
-                np.array(targets[-self.verbosity_n_batches:]), 
+                np.array(targets[-self.verbosity_n_batches:]),
                 np.array(probs[-self.verbosity_n_batches:])
             )
-            batch_tprs, batch_f1s = batchMetrics[:,0], batchMetrics[:,1]
+            batch_tprs, batch_f1s = batchMetrics[:, 0], batchMetrics[:, 1]
 
-            try: # calculate auc for last set of batches
+            try:  # calculate auc for last set of batches
                 batch_auc = roc_auc_score(
-                    targets[-self.verbosity_n_batches:], 
+                    targets[-self.verbosity_n_batches:],
                     probs[-self.verbosity_n_batches:]
                 )
             # batch might contain only one class, then auc fails
@@ -335,7 +360,7 @@ class ModelTrainer(object):
                 f1s=batch_f1s,
                 auc=batch_auc
             )
-        else: # multiclass
+        else:  # multiclass
             # TODO: implement multiclass roc
             pass
         msg = " [*] {}: Train Epoch: {} [{:^5}/{:^5} ({:^2.0f}%)] | ".format(
@@ -366,7 +391,7 @@ class ModelTrainer(object):
                 target = target.reshape(-1, 1)
             elif isinstance(self.loss_function, CrossEntropyLoss) and target.dim() != 1:
                 target = target.squeeze()
-            
+
             try:
                 loss = self.loss_function(logits, target)
             except RuntimeError:
@@ -375,39 +400,41 @@ class ModelTrainer(object):
                 target = target.long()
                 loss = self.loss_function(logits, target)
 
-            loss.backward() # derivatives
+            loss.backward()  # derivatives
             epoch_losses.append(loss.item())
 
             # +1 to skip update at first batch since not yet accumulated gradients
             if ((batch_idx + 1) % self.n_batches_grad_update == 0) or \
-                (batch_idx + 1 == len(train_loader)): # to update at last batch
+                    (batch_idx + 1 == len(train_loader)):  # to update at last batch
 
                 if self.clip_grad_norm is not None:
-                    clip_grad_norm_(self.model.parameters(), self.clip_grad_norm)
+                    clip_grad_norm_(self.model.parameters(),
+                                    self.clip_grad_norm)
 
                 self.optimizer.step()
                 self.optimizer.zero_grad()
-            
+
             # learning rate update
             self.global_batch_idx += 1
             if self.optim_scheduler is not None:
                 self.optim_scheduler.step(self.global_batch_idx)
                 self.learning_rates.append(self.optim_scheduler.get_lr())
-            
+
             predProbs = torch.sigmoid(logits).clone().detach().cpu().numpy()
             epochProbs.extend(predProbs)
-            
+
             if batch_idx % self.verbosity_n_batches == 0:
                 self.logBatchMetrics(loss, targets, epochProbs)
-            
+
             if self.time_budget is not None and (time.time() - self.training_start_time) > self.time_budget:
                 logging.warning(" [!] Time budget exceeded, training stopped.")
                 raise KeyboardInterrupt
 
-        if self.n_output_classes == 1: # calculate TRP & F1 only for binary classification
-            epochMetrics = self.getMetrics(np.array(targets), np.array(epochProbs))
-            epoch_tprs, epoch_f1s = epochMetrics[:,0], epochMetrics[:,1]
-            # calculate auc 
+        if self.n_output_classes == 1:  # calculate TRP & F1 only for binary classification
+            epochMetrics = self.getMetrics(
+                np.array(targets), np.array(epochProbs))
+            epoch_tprs, epoch_f1s = epochMetrics[:, 0], epochMetrics[:, 1]
+            # calculate auc
             epoch_auc = roc_auc_score(targets, epochProbs)
             return epoch_losses, epoch_tprs, epoch_f1s, epoch_auc
         else:
@@ -429,17 +456,19 @@ class ModelTrainer(object):
             self.time_budget = time_budget if time_budget else self.time_budget
             if isinstance(self.time_budget, float):
                 self.time_budget = int(self.time_budget)
-            assert isinstance(self.time_budget, int),\
+            assert isinstance(self.time_budget, int), \
                 f"time_budget must be an integer, instead got {self.time_budget}:{type(self.time_budget)}"
             self.training_start_time = time.time()
-            logging.warning(f" [*] Training time budget set: {self.time_budget/60} min")
+            logging.warning(
+                f" [*] Training time budget set: {self.time_budget/60} min")
         self.epochs = int(1e4) if self.time_budget else epochs
 
         if reporting_timestamp:
             self.reporting_timestamp = reporting_timestamp
 
         trainLoader = DataLoader(
-            TensorDataset(torch.from_numpy(X).long(), torch.from_numpy(y).float()),
+            TensorDataset(torch.from_numpy(X).long(),
+                          torch.from_numpy(y).float()),
             batch_size=self.batch_size,
             shuffle=True
         )
@@ -454,16 +483,19 @@ class ModelTrainer(object):
         try:
             for epoch_idx in range(1, epochs + 1):
                 if overwrite_epoch_idx:
-                    assert isinstance(overwrite_epoch_idx, int), "overwrite_epoch_idx must be an integer"
+                    assert isinstance(
+                        overwrite_epoch_idx, int), "overwrite_epoch_idx must be an integer"
                     epoch_idx = overwrite_epoch_idx + epoch_idx
                 self.epoch_idx = epoch_idx
 
                 epochStartTime = time.time()
                 logging.warning(f" [*] Started epoch: {epoch_idx}")
-                epoch_train_loss, epoch_tprs, epoch_f1s, epoch_auc = self.train_one_epoch(trainLoader)
+                epoch_train_loss, epoch_tprs, epoch_f1s, epoch_auc = self.train_one_epoch(
+                    trainLoader)
 
                 if overwrite_epoch_idx:
-                    self.train_tprs[epoch_idx-1-overwrite_epoch_idx] = epoch_tprs
+                    self.train_tprs[epoch_idx-1 -
+                                    overwrite_epoch_idx] = epoch_tprs
                     self.train_f1s[epoch_idx-1-overwrite_epoch_idx] = epoch_f1s
                 else:
                     self.train_tprs[epoch_idx-1] = epoch_tprs
@@ -473,17 +505,20 @@ class ModelTrainer(object):
                 self.auc.append(epoch_auc)
                 timeElapsed = time.time() - epochStartTime
                 self.training_time.append(timeElapsed)
-                
-                metricsReportList = [f"{epoch_idx:^7}", f"Tr.loss: {np.nanmean(epoch_train_loss):.6f}", f"Elapsed: {timeElapsed:^9.2f}s"]
+
+                metricsReportList = [
+                    f"{epoch_idx:^7}", f"Tr.loss: {np.nanmean(epoch_train_loss):.6f}", f"Elapsed: {timeElapsed:^9.2f}s"]
                 metricsReportList = self.updateMetricsReportList(
                     metricsReportList,
                     tprs=epoch_tprs,
                     f1s=epoch_f1s,
                     auc=epoch_auc
                 )
-                logging.warning(f" [*] {time.ctime()}: " + " | ".join(metricsReportList))
+                logging.warning(f" [*] {time.ctime()}: " +
+                                " | ".join(metricsReportList))
                 if dump_model_every_epoch:
-                    self.dumpResults(prefix=f"epoch_{epoch_idx}_", model_only=True)
+                    self.dumpResults(
+                        prefix=f"epoch_{epoch_idx}_", model_only=True)
             if self.output_folder:
                 self.dumpResults()
         except KeyboardInterrupt:
@@ -492,17 +527,18 @@ class ModelTrainer(object):
 
     def train(self, X, y, epochs=10, time_budget=None, dump_model_every_epoch=False, overwrite_epoch_idx=False, reporting_timestamp=None):
         self.fit(
-            X, y, 
-            epochs=epochs, 
-            time_budget=time_budget, 
-            dump_model_every_epoch=dump_model_every_epoch, 
-            overwrite_epoch_idx=overwrite_epoch_idx, 
+            X, y,
+            epochs=epochs,
+            time_budget=time_budget,
+            dump_model_every_epoch=dump_model_every_epoch,
+            overwrite_epoch_idx=overwrite_epoch_idx,
             reporting_timestamp=reporting_timestamp
         )
 
     def evaluate(self, X, y, metrics="array"):
         testLoader = DataLoader(
-            TensorDataset(torch.from_numpy(X).long(), torch.from_numpy(y).float()),
+            TensorDataset(torch.from_numpy(X).long(),
+                          torch.from_numpy(y).float()),
             batch_size=self.batch_size,
             shuffle=True
         )
@@ -518,24 +554,27 @@ class ModelTrainer(object):
             with torch.no_grad():
                 logits = self.model.forwardPass(data)
 
-            loss = self.loss_function(logits, target.float().reshape(-1,1))
+            loss = self.loss_function(logits, target.float().reshape(-1, 1))
             self.testLoss.append(loss.item())
 
             predProbs = torch.sigmoid(logits).clone().detach().cpu().numpy()
             self.predProbs.extend(predProbs)
-        
-        metricsValues = self.getMetrics(np.array(self.trueLabels), np.array(self.predProbs))
-        self.test_tprs, self.test_f1s = metricsValues[:,0], metricsValues[:,1]
+
+        metricsValues = self.getMetrics(
+            np.array(self.trueLabels), np.array(self.predProbs))
+        self.test_tprs, self.test_f1s = metricsValues[:,
+                                                      0], metricsValues[:, 1]
         self.test_auc = roc_auc_score(self.trueLabels, self.predProbs)
         if metrics == "array":
             return self.testLoss, self.test_tprs, self.test_f1s, self.test_auc
         elif metrics == "json":
             return self.metricsToJSON([self.testLoss, self.test_tprs, self.test_f1s, self.test_auc])
         else:
-            raise ValueError("evaluate(): Inappropriate metrics value, must be in: ['array', 'json']")
+            raise ValueError(
+                "evaluate(): Inappropriate metrics value, must be in: ['array', 'json']")
 
     def predict_proba(self, arr):
-        out = torch.empty((0,self.n_output_classes)).to(self.device)
+        out = torch.empty((0, self.n_output_classes)).to(self.device)
         loader = DataLoader(
             TensorDataset(torch.from_numpy(arr).long()),
             batch_size=self.batch_size,
@@ -545,23 +584,26 @@ class ModelTrainer(object):
         self.model.eval()
         for batch_idx, data in enumerate(loader):
             with torch.no_grad():
-                logits = self.model(torch.Tensor(data[0]).long().to(self.device))
+                logits = self.model(torch.Tensor(
+                    data[0]).long().to(self.device))
                 out = torch.vstack([out, logits])
             if batch_idx % self.verbosity_n_batches == 0:
-                print(f" [*] Predicting batch: {batch_idx}/{len(loader)}", end="\r")
+                print(
+                    f" [*] Predicting batch: {batch_idx}/{len(loader)}", end="\r")
         if self.n_output_classes == 1:
             return torch.sigmoid(out).clone().detach().cpu().numpy()
         else:
             return torch.softmax(out, axis=1).clone().detach().cpu().numpy()
-    
+
     def predict(self, arr, threshold=0.5):
         self.model.eval()
         with torch.no_grad():
             prob = self.model.predict_proba(arr)
         return (prob > threshold).astype(np.int8)
-    
+
     def metricsToJSON(self, metrics):
-        assert len(metrics) == 4, "metricsToJSON(): metrics must be a list of length 4"
+        assert len(
+            metrics) == 4, "metricsToJSON(): metrics must be a list of length 4"
         tprs = dict(zip(["fpr_"+str(x) for x in self.fp_rates], metrics[1]))
         f1s = dict(zip(["fpr_"+str(x) for x in self.fp_rates], metrics[2]))
         metricDict = DataFrame([tprs, f1s], index=["tpr", "f1"]).to_dict()
@@ -572,26 +614,29 @@ class ModelTrainer(object):
 
 class PEHybridClassifier(nn.Module):
     def __init__(self,
-                    speakeasyConfig=None,
-                    vocab=None,
-                    tokenizerModelPath=None,
-                    outputFolder=None,
-                    malwareHeadLayers = [128, 64],
-                    representationSize = 256,
-                    dropout=0.5
-        ):
+                 speakeasyConfig=None,
+                 vocab=None,
+                 tokenizerModelPath=None,
+                 outputFolder=None,
+                 malwareHeadLayers=[128, 64],
+                 representationSize=256,
+                 dropout=0.5
+                 ):
         super(PEHybridClassifier, self).__init__()
-        
+
         if speakeasyConfig is None:
-            speakeasyConfigFile = os.path.join(os.path.dirname(nebula.__file__), "objects", "speakeasy_config.json")
+            speakeasyConfigFile = os.path.join(os.path.dirname(
+                nebula.__file__), "objects", "speakeasy_config.json")
             with open(speakeasyConfigFile, "r") as f:
                 speakeasyConfig = json.load(f)
         if vocab is None:
-            vocabFile = os.path.join(os.path.dirname(nebula.__file__), "objects", "bpe_50000_vocab.json")
+            vocabFile = os.path.join(os.path.dirname(
+                nebula.__file__), "objects", "bpe_50000_vocab.json")
             with open(vocabFile, "r") as f:
                 vocab = json.load(f)
         if tokenizerModelPath is None:
-            tokenizerModelPath = os.path.join(os.path.dirname(nebula.__file__), "objects", "bpe_50000_sentencepiece.model")
+            tokenizerModelPath = os.path.join(os.path.dirname(
+                nebula.__file__), "objects", "bpe_50000_sentencepiece.model")
             self.tokenizer = JSONTokenizerBPE(model_path=tokenizerModelPath)
             self.tokenizer.load_vocab()
 
@@ -614,7 +659,7 @@ class PEHybridClassifier(nn.Module):
 
         # malware head
         layers = []
-        for i,ls in enumerate(malwareHeadLayers):
+        for i, ls in enumerate(malwareHeadLayers):
             if i == 0:
                 layers.append(nn.Linear(representationSize, ls))
             else:
@@ -637,15 +682,19 @@ class PEHybridClassifier(nn.Module):
         elif isinstance(data, bytes):
             bytez = data
         else:
-            raise ValueError("preprocess(): data must be a path to a PE file or a bytes object")
-        staticFeatures = self.staticExtractor.feature_vector(bytez).reshape(1,-1)
+            raise ValueError(
+                "preprocess(): data must be a path to a PE file or a bytes object")
+        staticFeatures = self.staticExtractor.feature_vector(
+            bytez).reshape(1, -1)
         dynamicFeaturesJson = self.dynamicExtractor.emulate(data=bytez)
         dynamicFeatures = self.tokenizer.encode(dynamicFeaturesJson)
         return torch.Tensor(staticFeatures), torch.Tensor(dynamicFeatures)
-    
+
     def forward(self, staticFeatures, dynamicFeatures):
-        staticFeatures = self.staticModel.get_representations(staticFeatures.float())
-        dynamicFeatures = self.dynamicModel.get_representations(dynamicFeatures.long())
+        staticFeatures = self.staticModel.get_representations(
+            staticFeatures.float())
+        dynamicFeatures = self.dynamicModel.get_representations(
+            dynamicFeatures.long())
         # sum static and dynamic features
         features = staticFeatures + dynamicFeatures
         return self.malware_head(features)
@@ -655,9 +704,9 @@ class PEHybridClassifier(nn.Module):
         raise NotImplementedError("build_vocabulary(): Not implemented yet")
 
     def train(
-        self, 
-        folderBenign, 
-        folderMalicious, 
+        self,
+        folderBenign,
+        folderMalicious,
         epochs=10
     ):
         # TODO: train classifier using raw PE files in benign an malicious folders
